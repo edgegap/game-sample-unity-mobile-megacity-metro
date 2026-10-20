@@ -11,6 +11,7 @@ using Unity.Services.Samples;
 using Unity.Services.Authentication;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Services.Multiplayer;
+using Unity.MegacityMetro.Edgegap;
 
 namespace Unity.MegacityMetro.UGS
 {
@@ -21,7 +22,7 @@ namespace Unity.MegacityMetro.UGS
     {
         public bool ClientIsInGame { get; set; }
         public bool IsTryingToConnect { get; private set; }
-        public bool IsMatchmakerInitialized => m_ClientManager != null;
+        public bool IsMatchmakerInitialized => m_ClientManager != null || EdgegapEnvironment.HasDirectConnect;
         [SerializeField] private PlayerInfoItemSettings m_Settings;
         [field: SerializeField] public string IP { get; private set; } = "127.0.0.1";
         [field: SerializeField] public ushort Port { get; private set; } = NetCodeBootstrap.MegacityMetroServerIp.Port;
@@ -54,6 +55,13 @@ namespace Unity.MegacityMetro.UGS
 
         private async void Start() 
         {
+            if (EdgegapEnvironment.HasDirectConnect)
+            {
+                // Direct connection to an Edgegap server: no Unity Gaming Services sign-in needed.
+                m_Settings.PlayerName = BotNameGenerator.GetRandomName();
+                IsInitialized = true;
+                return;
+            }
 
             // Check if the project is linked to a project ID
             if (string.IsNullOrEmpty(Application.cloudProjectId))
@@ -139,6 +147,16 @@ namespace Unity.MegacityMetro.UGS
         {
             Debug.Log("Beginning Matchmaking.");
             HasMatchmakingSuccess = false;
+
+            if (EdgegapEnvironment.TryGetDirectConnect(out var directIP, out var directPort))
+            {
+                ServerConnectionUtils.SetDefaultWorld();
+                Port = directPort;
+                HasMatchmakingSuccess = true;
+                MatchMakingUI.Instance.UpdateConnectionStatus($"[Netcode] Connecting to {directIP} : {directPort}...");
+                ConnectToServer($"{directIP}:{directPort}");
+                return;
+            }
             MatchMakingUI.Instance.UpdateConnectionStatus("[Matchmaker] Searching...");
             if (string.IsNullOrEmpty(Application.cloudProjectId))
             {
@@ -190,6 +208,9 @@ namespace Unity.MegacityMetro.UGS
         // Make accessible to UI classes
         public async Task ClearSession()
         {
+            if (m_ClientManager == null)
+                return;
+
             // This is necessary to avoid an exception when rejoining a server session,
             await m_ClientManager.LeaveSessionAsync();
             m_ClientManager.SetupMenu();
@@ -198,7 +219,7 @@ namespace Unity.MegacityMetro.UGS
         public void SetProfileServiceName(string newValue)
         {
             m_Settings.PlayerName = newValue;
-            m_ProfileService.LocalPlayer.SetName(newValue);
+            m_ProfileService?.LocalPlayer.SetName(newValue);
         }
 
         public void UpdateConnectionStatusLabel()

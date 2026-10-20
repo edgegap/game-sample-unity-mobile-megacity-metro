@@ -12,6 +12,7 @@ using Unity.Services.Multiplayer;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Unity.Services.MultiplayerSDK.Utils;
+using Unity.MegacityMetro.Edgegap;
 
 namespace Unity.Services.MultiplayerSDK.Server 
 {
@@ -84,6 +85,15 @@ namespace Unity.Services.MultiplayerSDK.Server
         public async Task StartAsync()
         {
             ServerState = ServerState.Executing;
+
+            // Edgegap starts this container per match and gives clients its address directly
+            // (or through the Edgegap matchmaker), so no Multiplay allocation or UGS session is needed.
+            if (EdgegapEnvironment.IsOnEdgegap)
+            {
+                Debug.Log($"[ServerManager] Running on Edgegap (deployment {EdgegapEnvironment.RequestId}), skipping UGS sessions.");
+                ServerState = ServerState.Game;
+                return;
+            }
 
             await UnityServices.InitializeAsync();
 
@@ -208,7 +218,8 @@ namespace Unity.Services.MultiplayerSDK.Server
                     }
                     else
                     {
-                        throw new Exception("Missing credentials for server authentication");
+                        // No Multiplay and no service account: still serve direct connections (local or Docker runs).
+                        Debug.LogWarning("[ServerManager] No Multiplay allocation or service account, running without UGS sessions.");
                     }
 
                     // TBD: Set this now or once server is allocated (if Multiplay)?

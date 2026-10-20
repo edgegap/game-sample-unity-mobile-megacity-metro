@@ -1,0 +1,6 @@
+# Build context is the Unity project root: send only the server build to Docker.
+*
+!Builds/EdgegapServer/**
+# Debug symbols and IL2CPP sources Unity writes next to the build; never ship them.
+Builds/EdgegapServer/*_BurstDebugInformation_DoNotShip
+Builds/EdgegapServer/*_BackUpThisFolder_ButDontShipItWithYourGame
