@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.edgegap.unity-sdk": "https://github.com/edgegap/edgegap-unity-sdk.git#3.5.5",
     "com.autodesk.fbx": "5.1.1",
     "com.unity.2d.animation": "10.2.0",
     "com.unity.2d.psdimporter": "10.1.0",

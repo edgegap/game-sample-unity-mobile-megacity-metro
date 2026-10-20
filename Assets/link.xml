@@ -30,5 +30,11 @@
 	<assembly fullname="Unity.Physics" preserve="all" />
 	<assembly fullname="Unity.NetCode" preserve="all" />
 	<assembly fullname="Unity.NetCode.Extensions" preserve="all" />
+	<!-- Edgegap matchmaker data classes: Newtonsoft.Json creates them via reflection. -->
+	<assembly fullname="Edgegap.SDK" preserve="all" />
+	<assembly fullname="Unity.MegacityMetro.Gameplay.Mix">
+		<type fullname="Unity.MegacityMetro.Edgegap.MetroTicketAttributes" preserve="all" />
+		<type fullname="Unity.MegacityMetro.Edgegap.MetroGroupUpRequest" preserve="all" />
+	</assembly>
 </linker>
 

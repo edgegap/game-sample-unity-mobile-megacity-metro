@@ -7,6 +7,15 @@
       "dependencies": {},
       "url": "https://packages.unity.com"
     },
+    "com.edgegap.unity-sdk": {
+      "version": "https://github.com/edgegap/edgegap-unity-sdk.git#3.5.5",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.nuget.newtonsoft-json": "3.2.2"
+      },
+      "hash": "d87fda07ac1237633161daf60970a9984cd6547a"
+    },
     "com.unity.2d.animation": {
       "version": "10.2.0",
       "depth": 0,
@@ -237,7 +246,7 @@
       "url": "https://packages.unity.com"
     },
     "com.unity.nuget.newtonsoft-json": {
-      "version": "3.2.1",
+      "version": "3.2.2",
       "depth": 1,
       "source": "registry",
       "dependencies": {},

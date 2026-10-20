@@ -9,6 +9,8 @@ namespace Unity.MegacityMetro.Edgegap
     /// <summary>
     /// Stops this Edgegap deployment once nobody is playing on it, so an empty server does not keep running
     /// (and billing) until its maximum duration. Only active inside an Edgegap deployment.
+    /// Players the matchmaker seated here but who are still connecting count as present, and open backfills are
+    /// closed before the deployment stops so the matchmaker never sends a player to a server that is going away.
     /// Timeouts can be changed per app version with the EDGEGAP_FIRST_PLAYER_TIMEOUT_S and
     /// EDGEGAP_EMPTY_TIMEOUT_S environment variables.
     /// </summary>
@@ -24,8 +26,11 @@ namespace Unity.MegacityMetro.Edgegap
         private float m_StartedAt;
         private float m_EmptySince = -1f;
         private int m_LastPlayerCount = -1;
+        private int m_LastPendingCount;
         private bool m_AnyPlayerJoined;
         private UnityWebRequest m_SelfStopRequest;
+        private string m_StopReason;
+        private float m_StopRequestedAt;
 
         protected override void OnCreate()
         {
@@ -67,11 +72,22 @@ namespace Unity.MegacityMetro.Edgegap
             }
 
             var now = UnityEngine.Time.realtimeSinceStartup;
-            var playerCount = m_ConnectedPlayers.CalculateEntityCount();
-            if (playerCount != m_LastPlayerCount)
+            if (m_StopReason != null)
             {
-                Debug.Log($"[Edgegap] Connected players: {playerCount}");
+                // Wait for EdgegapBackfillSystem to close its backfills, then stop.
+                if (EdgegapBackfillState.IsClosed || now - m_StopRequestedAt > 10f)
+                    SelfStop();
+                return;
+            }
+
+            var playerCount = m_ConnectedPlayers.CalculateEntityCount();
+            var pendingCount = EdgegapBackfillState.PendingPlayers;
+            if (playerCount != m_LastPlayerCount || pendingCount != m_LastPendingCount)
+            {
+                Debug.Log($"[Edgegap] Connected players: {playerCount}" +
+                          (pendingCount > 0 ? $" (+{pendingCount} matched, connecting)" : ""));
                 m_LastPlayerCount = playerCount;
+                m_LastPendingCount = pendingCount;
             }
 
             if (playerCount > 0)
@@ -81,23 +97,36 @@ namespace Unity.MegacityMetro.Edgegap
                 return;
             }
 
+            // A player the matchmaker just seated here is on the way: keep the server up for them.
+            if (pendingCount > 0)
+            {
+                m_EmptySince = -1f;
+                return;
+            }
+
             if (!m_AnyPlayerJoined)
             {
                 if (now - m_StartedAt > m_FirstPlayerTimeout)
-                    SelfStop("no player connected in time");
+                    RequestStop("no player connected in time", now);
                 return;
             }
 
             if (m_EmptySince < 0f)
                 m_EmptySince = now;
             else if (now - m_EmptySince > m_EmptyTimeout)
-                SelfStop("all players left");
+                RequestStop("all players left", now);
         }
 
-        private void SelfStop(string reason)
+        private void RequestStop(string reason, float now)
         {
             Debug.Log($"[Edgegap] Stopping deployment: {reason}.");
+            m_StopReason = reason;
+            m_StopRequestedAt = now;
+            EdgegapBackfillState.StopRequested = true;
+        }
 
+        private void SelfStop()
+        {
             var url = EdgegapEnvironment.SelfStopUrl;
             var token = EdgegapEnvironment.SelfStopToken;
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
