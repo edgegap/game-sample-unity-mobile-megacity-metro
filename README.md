@@ -1,3 +1,5 @@
+> **Edgegap sample:** this fork runs its dedicated server on Edgegap, with direct connect from desktop clients. See [EDGEGAP.md](EDGEGAP.md).
+
 ![Megacity-Metro](Documentation/Images/header.jpg)
 
 ## Contents and Quick Links
