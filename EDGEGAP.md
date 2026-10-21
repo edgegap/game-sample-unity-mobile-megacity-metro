@@ -1,8 +1,8 @@
-# Megacity Metro on Edgegap dedicated servers
+# Megacity Metro on Edgegap dedicated servers and matchmaking
 
-A fork of Unity's [Megacity Metro](https://github.com/Unity-Technologies/megacity-metro) (Netcode for Entities, up to 150 players) set up as an Edgegap sample. The dedicated server runs on Edgegap, desktop clients connect to it directly, and the server stops its own deployment when nobody is playing.
+A fork of Unity's [Megacity Metro](https://github.com/Unity-Technologies/megacity-metro) (Netcode for Entities, up to 150 players) set up as an Edgegap sample. **Find Match** goes through the Edgegap matchmaker, which starts a dedicated server on Edgegap near the players. Players who search later join running servers through backfill, up to 150 per server. The server stops its own deployment when nobody is playing. Desktop clients can also connect to a server directly.
 
-This is step 1. The Edgegap matchmaker is not done yet, and neither are mobile clients (see [Not done yet](#not-done-yet)).
+Mobile clients are not tested yet (see [Not done yet](#not-done-yet)).
 
 The game's netcode is unchanged. The Edgegap pieces are a few new files, plus small hooks in two upstream files:
 
@@ -13,9 +13,16 @@ The game's netcode is unchanged. The Edgegap pieces are a few new files, plus sm
 | `Assets/Edgegap/Editor/EdgegapServerBuild.cs` | **Tools → Edgegap → Build Linux Dedicated Server**, also callable from the command line |
 | `Dockerfile`, `.dockerignore` | Server image from `Builds/EdgegapServer/` |
 | `Assets/Scripts/Gameplay/Mix/Multiplayer/SDK/Server/ServerManager.cs` | On Edgegap, skips Unity Gaming Services (UGS) sessions |
-| `Assets/Scripts/Gameplay/Mix/UI/MonoBehaviours/Matchmaker/MatchMakingConnector.cs` | With a direct-connect target, skips UGS sign-in and connects straight to the server |
+| `Assets/Scripts/Gameplay/Mix/UI/MonoBehaviours/Matchmaker/MatchMakingConnector.cs` | Find Match uses the Edgegap matchmaker; with a direct-connect target, connects straight to the server. Either way, skips UGS sign-in |
+| `Assets/Scripts/Gameplay/Mix/Multiplayer/Edgegap/EdgegapMatchmakerSettings.cs`, `Assets/Resources/EdgegapMatchmakerSettings.asset` | Matchmaker URL, auth token, profile and backfill settings, shared by client and server |
+| `Assets/Scripts/Gameplay/Mix/Multiplayer/Edgegap/EdgegapMatchmakerClient.cs` | Client: queues a solo ticket and returns the server's IP and port |
+| `Assets/Scripts/Gameplay/Mix/Multiplayer/Edgegap/EdgegapBackfillSystem.cs` | Server world, matchmaker deployments only: keeps backfills open while seats are free |
+| `Assets/Scripts/Gameplay/Mix/Multiplayer/Edgegap/EdgegapTicketRpc.cs` | Client sends its matchmaker ticket ID after connecting, so the server can track seats |
+| `matchmaker-config.json` | Matchmaker configuration to upload in the dashboard |
 
-Outside an Edgegap deployment (no `ARBITRIUM_REQUEST_ID`) and without a direct-connect target, the game behaves exactly like upstream.
+The matchmaker client and server backfill use the [Edgegap Unity SDK](https://github.com/edgegap/edgegap-unity-sdk) (`com.edgegap.unity-sdk` 3.5.5, in `Packages/manifest.json`).
+
+With an empty matchmaker URL in `EdgegapMatchmakerSettings`, outside an Edgegap deployment (no `ARBITRIUM_REQUEST_ID`), and without a direct-connect target, the game behaves exactly like upstream.
 
 ## Prerequisites
 
@@ -67,6 +74,33 @@ or set `EDGEGAP_CONNECT=<host>:<external port>` before launching it. The host ca
 
 The server logs `[Edgegap] Connected players: 1` when the client joins.
 
+## 5. Create the matchmaker
+
+1. Set `application.version` in `matchmaker-config.json` to your app version. Profile `metro`: one team of 2 to 150 players. Two players searching together get one server about 10 s after they queue, and a lone player gets one after 30 s. That suits testing; raise the minimum for real matches.
+2. In the dashboard, open **Matchmaker → Create Matchmaker**, upload `matchmaker-config.json`, then click **Create and Start**.
+3. When it shows ONLINE, copy the **API URL** and **Auth Token** into `Assets/Resources/EdgegapMatchmakerSettings.asset`. The auth token belongs to the matchmaker and grants no access to your Edgegap account, so it is safe to ship in clients.
+4. Rebuild the server and the clients. Both read this asset: the client to find matches, the server to create backfills.
+
+`-edgegapMatchmakerUrl`, `-edgegapMatchmakerToken` and `-edgegapMatchmakerProfile` (or `EDGEGAP_MM_URL`, `EDGEGAP_MM_TOKEN`, `EDGEGAP_MM_PROFILE`) override the asset at launch. On the free tier, the matchmaker shuts down 3 hours after each start; restart it from the dashboard. Its URL and token stay the same.
+
+Click **Find Match** in a client. Batch-mode clients (`-batchmode -nographics`) matchmake on their own. The status goes `Searching...`, `Match found, starting server...`, then the client connects.
+
+## Backfill (join in progress)
+
+A backfill is a ticket owned by a running server. When a newly queued player matches it, the matchmaker sends that player to this server instead of starting a new one. Every ticket carries a `backfill_group_size` attribute: clients send `["new", "1"]` ("a new match, or one seat on a running server"), and the server sends `["1"]`.
+
+On matchmaker deployments, `EdgegapBackfillSystem`:
+
+- reads the match from the `MM_*` variables and gives each matched player 60 s to connect,
+- keeps up to 3 backfills open while seats are free (150 minus connected players minus players on the way). `EDGEGAP_MAX_PLAYERS` and `EDGEGAP_MAX_OPEN_BACKFILLS` on the app version change these limits,
+- turns a matched backfill into a seat for the new player, then opens another backfill,
+- matches connections to tickets with `EdgegapTicketRpc`, and frees a seat when its player leaves or never arrives,
+- closes all backfills before the server stops itself.
+
+Players who are matched but still connecting keep the server from self-stopping.
+
+One known gap: if a deployment is stopped from outside (dashboard or API stop, or the max duration), the Unity player exits on SIGTERM without closing its backfills. Until they expire (`ticket_expiration_period`, 5 min), they can send a player to the stopped server. That player's connection times out, and the next Find Match works.
+
 ## Self-stop
 
 Inside an Edgegap deployment, `EdgegapServerLifecycleSystem` stops the deployment through `ARBITRIUM_DELETE_URL`:
@@ -86,8 +120,17 @@ Set either variable on the app version to change the timeout. If the stop reques
 
 The Windows client is an IL2CPP Master build: it took about 40 minutes and the linker used about 12 GB of RAM.
 
+2026-10-21, matchmaker (free tier) with the `metro` profile, app version with 1 vCPU / 2 GB:
+
+- Two Windows clients (Mono test builds, `-batchmode -nographics`) queued together, got `MATCH_FOUND` then `HOST_ASSIGNED` for the same deployment, and both connected. The server matched both tickets to their connections.
+- A third client queued while that match was running. It went from `SEARCHING` straight to `HOST_ASSIGNED` on the same deployment through a backfill, and joined (3 players).
+- After all three quit, the deployment stopped itself.
+- Locally (server in Docker, mocked Edgegap variables, real matchmaker): when no matched player connected within the 60 s grace, the seats were released and the backfills closed.
+
+For quick test clients, `-executeMethod EdgegapServerBuild.BuildClient -edgegapClientTarget win64 -edgegapClientMono -buildTarget Win64 -standaloneBuildSubtarget Player` builds with Mono into `Builds/Client/win64-mono/`. Pass `-standaloneBuildSubtarget Player` after a server build, or the build fails with "script class layout is incompatible".
+
 ## Not done yet
 
-- **Edgegap matchmaker.** Mobile release builds hide the Connect option, so phones need a matchmaker to find a server. A 150-player game also needs backfill so players can join a match in progress.
-- **Android and iOS clients**, and a windowed playtest on desktop.
-- Vivox and UGS sign-in are untouched. The direct-connect path doesn't use them.
+- **Android and iOS clients**, and a windowed playtest on desktop. Mobile release builds hide the Connect option, so phones use Find Match, the path tested above.
+- **Ticket validation.** The server logs a connection whose ticket it was not given, but still lets it in.
+- Vivox and UGS sign-in are untouched. The Edgegap matchmaker and direct-connect paths don't use them, and the Connect mode's session browser still lists UGS sessions.

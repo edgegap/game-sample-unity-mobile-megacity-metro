@@ -79,13 +79,33 @@ public static class EdgegapServerBuild
         if (target != BuildTarget.WebGL)
             EditorUserBuildSettings.standaloneBuildSubtarget = StandaloneBuildSubtarget.Player;
 
-        BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+        // -edgegapClientMono: Mono instead of the project's IL2CPP for quick test clients (minutes instead of
+        // ~40 min of IL2CPP Master linking). The project setting is restored after the build.
+        var group = UnityEditor.Build.NamedBuildTarget.Standalone;
+        var backend = PlayerSettings.GetScriptingBackend(group);
+        bool mono = target != BuildTarget.WebGL && Array.IndexOf(args, "-edgegapClientMono") >= 0;
+        if (mono)
         {
-            scenes = scenes,
-            target = target,
-            subtarget = target == BuildTarget.WebGL ? 0 : (int)StandaloneBuildSubtarget.Player,
-            locationPathName = path,
-        });
+            PlayerSettings.SetScriptingBackend(group, ScriptingImplementation.Mono2x);
+            path = path.Replace($"Builds/Client/{name}/", $"Builds/Client/{name}-mono/"); // IL2CPP output can't be reused
+        }
+
+        BuildReport report;
+        try
+        {
+            report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = scenes,
+                target = target,
+                subtarget = target == BuildTarget.WebGL ? 0 : (int)StandaloneBuildSubtarget.Player,
+                locationPathName = path,
+            });
+        }
+        finally
+        {
+            if (mono)
+                PlayerSettings.SetScriptingBackend(group, backend);
+        }
 
         if (report.summary.result != BuildResult.Succeeded)
         {

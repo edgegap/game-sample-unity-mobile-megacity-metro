@@ -22,7 +22,7 @@ namespace Unity.MegacityMetro.UGS
     {
         public bool ClientIsInGame { get; set; }
         public bool IsTryingToConnect { get; private set; }
-        public bool IsMatchmakerInitialized => m_ClientManager != null || EdgegapEnvironment.HasDirectConnect;
+        public bool IsMatchmakerInitialized => m_ClientManager != null || m_EdgegapMatchmaker != null || EdgegapEnvironment.HasDirectConnect;
         [SerializeField] private PlayerInfoItemSettings m_Settings;
         [field: SerializeField] public string IP { get; private set; } = "127.0.0.1";
         [field: SerializeField] public ushort Port { get; private set; } = NetCodeBootstrap.MegacityMetroServerIp.Port;
@@ -35,6 +35,7 @@ namespace Unity.MegacityMetro.UGS
 
 
         private ClientManager m_ClientManager;
+        private EdgegapMatchmakerClient m_EdgegapMatchmaker;
         private Dispatcher m_Dispatcher;
 
         private int attemptNumber = 0;
@@ -62,6 +63,17 @@ namespace Unity.MegacityMetro.UGS
                 IsInitialized = true;
                 return;
             }
+
+#if !UNITY_SERVER
+            if (EdgegapMatchmakerSettings.IsEnabled)
+            {
+                // Find Match goes through the Edgegap matchmaker: no Unity Gaming Services sign-in needed.
+                m_Settings.PlayerName = BotNameGenerator.GetRandomName();
+                m_EdgegapMatchmaker = new EdgegapMatchmakerClient(this, EdgegapMatchmakerSettings.Instance);
+                IsInitialized = true;
+                return;
+            }
+#endif
 
             // Check if the project is linked to a project ID
             if (string.IsNullOrEmpty(Application.cloudProjectId))
@@ -157,6 +169,12 @@ namespace Unity.MegacityMetro.UGS
                 ConnectToServer($"{directIP}:{directPort}");
                 return;
             }
+
+            if (m_EdgegapMatchmaker != null)
+            {
+                await MatchmakeWithEdgegap();
+                return;
+            }
             MatchMakingUI.Instance.UpdateConnectionStatus("[Matchmaker] Searching...");
             if (string.IsNullOrEmpty(Application.cloudProjectId))
             {
@@ -203,6 +221,38 @@ namespace Unity.MegacityMetro.UGS
 
             attemptNumber++;
             Debug.Log($"Matchmaking attempt #{attemptNumber} - success? {HasMatchmakingSuccess}");
+        }
+
+        private async Task MatchmakeWithEdgegap()
+        {
+            try
+            {
+                var match = await m_EdgegapMatchmaker.FindMatchAsync(MatchMakingUI.Instance.UpdateConnectionStatus);
+                ServerConnectionUtils.SetDefaultWorld();
+                Port = match.Port;
+                HasMatchmakingSuccess = true;
+                Debug.Log($"[Matchmaker] Edgegap match found! Connecting to {match.IP} : {match.Port}");
+                MatchMakingUI.Instance.UpdateConnectionStatus($"[Netcode] Connecting to {match.IP} : {match.Port}...");
+                ConnectToServer($"{match.IP}:{match.Port}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Matchmaker] Error while matchmaking: {ex.Message}");
+                MatchMakingUI.Instance.UpdateConnectionStatus($"[Matchmaker] {ex.Message}");
+                HasMatchmakingSuccess = false;
+
+                // Automatic (batchmode) matchmaking retries as soon as this returns: don't hammer the matchmaker.
+                await Task.Delay(5000);
+            }
+
+            attemptNumber++;
+            Debug.Log($"Matchmaking attempt #{attemptNumber} - success? {HasMatchmakingSuccess}");
+        }
+
+        private void OnApplicationQuit()
+        {
+            // Best effort; unmatched tickets also expire on their own.
+            m_EdgegapMatchmaker?.Cancel();
         }
 
         // Make accessible to UI classes

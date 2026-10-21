@@ -25,7 +25,8 @@
         "Unity.Services.Core",
         "Unity.Services.Multiplayer",
         "Unity.Services.Multiplayer.Server",
-        "Unity.Services.Multiplayer.Multiplay"
+        "Unity.Services.Multiplayer.Multiplay",
+        "Edgegap.SDK"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
