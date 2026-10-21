@@ -240,6 +240,9 @@ namespace Unity.MegacityMetro.UGS
                 Debug.LogError($"[Matchmaker] Error while matchmaking: {ex.Message}");
                 MatchMakingUI.Instance.UpdateConnectionStatus($"[Matchmaker] {ex.Message}");
                 HasMatchmakingSuccess = false;
+
+                // Automatic (batchmode) matchmaking retries as soon as this returns: don't hammer the matchmaker.
+                await Task.Delay(5000);
             }
 
             attemptNumber++;
