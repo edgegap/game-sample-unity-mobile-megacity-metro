@@ -52,7 +52,7 @@ public static class EdgegapServerBuild
     }
 
     /// <summary>
-    /// Client build for end-to-end tests: -executeMethod EdgegapServerBuild.BuildClient -edgegapClientTarget webgl|win64|mac|linux
+    /// Client build for end-to-end tests: -executeMethod EdgegapServerBuild.BuildClient -edgegapClientTarget webgl|win64|mac|linux|android
     /// Output: Builds/Client/&lt;target&gt;/. Switches the active build target (slow the first time).
     /// </summary>
     public static void BuildClient()
@@ -66,6 +66,7 @@ public static class EdgegapServerBuild
             "win64" => (BuildTarget.StandaloneWindows64, "Builds/Client/win64/Game.exe"),
             "mac" => (BuildTarget.StandaloneOSX, "Builds/Client/mac/Game.app"),
             "linux" => (BuildTarget.StandaloneLinux64, "Builds/Client/linux/Game.x86_64"),
+            "android" => (BuildTarget.Android, "Builds/Client/android/MegacityMetro.apk"),
             _ => (BuildTarget.WebGL, "Builds/Client/webgl"),
         };
 
@@ -76,14 +77,21 @@ public static class EdgegapServerBuild
             return;
         }
 
-        if (target != BuildTarget.WebGL)
+        bool standalone = target != BuildTarget.WebGL && target != BuildTarget.Android;
+
+        // Android: an APK (not an App Bundle) that can be sideloaded for testing. ARM64 + IL2CPP come from
+        // the project's Player settings; without a custom keystore Unity signs it with the debug key.
+        if (target == BuildTarget.Android)
+            EditorUserBuildSettings.buildAppBundle = false;
+
+        if (standalone)
             EditorUserBuildSettings.standaloneBuildSubtarget = StandaloneBuildSubtarget.Player;
 
         // -edgegapClientMono: Mono instead of the project's IL2CPP for quick test clients (minutes instead of
         // ~40 min of IL2CPP Master linking). The project setting is restored after the build.
         var group = UnityEditor.Build.NamedBuildTarget.Standalone;
         var backend = PlayerSettings.GetScriptingBackend(group);
-        bool mono = target != BuildTarget.WebGL && Array.IndexOf(args, "-edgegapClientMono") >= 0;
+        bool mono = standalone && Array.IndexOf(args, "-edgegapClientMono") >= 0;
         if (mono)
         {
             PlayerSettings.SetScriptingBackend(group, ScriptingImplementation.Mono2x);
@@ -97,7 +105,7 @@ public static class EdgegapServerBuild
             {
                 scenes = scenes,
                 target = target,
-                subtarget = target == BuildTarget.WebGL ? 0 : (int)StandaloneBuildSubtarget.Player,
+                subtarget = standalone ? (int)StandaloneBuildSubtarget.Player : 0,
                 locationPathName = path,
             });
         }

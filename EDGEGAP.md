@@ -2,7 +2,7 @@
 
 A fork of Unity's [Megacity Metro](https://github.com/Unity-Technologies/megacity-metro) (Netcode for Entities, up to 150 players) set up as an Edgegap sample. **Find Match** goes through the Edgegap matchmaker, which starts a dedicated server on Edgegap near the players. Players who search later join running servers through backfill, up to 150 per server. The server stops its own deployment when nobody is playing. Desktop clients can also connect to a server directly.
 
-Mobile clients are not tested yet (see [Not done yet](#not-done-yet)).
+An Android APK builds with the same Find Match flow; it has not been played on a phone yet (see [Not done yet](#not-done-yet)).
 
 The game's netcode is unchanged. The Edgegap pieces are a few new files, plus small hooks in two upstream files:
 
@@ -85,6 +85,26 @@ The server logs `[Edgegap] Connected players: 1` when the client joins.
 
 Click **Find Match** in a client. Batch-mode clients (`-batchmode -nographics`) matchmake on their own. The status goes `Searching...`, `Match found, starting server...`, then the client connects.
 
+## 6. Build the clients
+
+Close the project in the Editor first, then run one of these from the project root:
+
+| Client | Command | Output |
+|---|---|---|
+| Windows, quick test build (Mono, minutes) | `<Unity> -batchmode -quit -buildTarget Win64 -standaloneBuildSubtarget Player -projectPath . -executeMethod EdgegapServerBuild.BuildClient -edgegapClientTarget win64 -edgegapClientMono -logFile client.log` | `Builds/Client/win64-mono/Game.exe` |
+| Windows, project settings (IL2CPP Master, ~40 min, ~12 GB RAM at link) | same, without `-edgegapClientMono` | `Builds/Client/win64/Game.exe` |
+| Android (IL2CPP, ARM64) | `<Unity> -batchmode -quit -buildTarget Android -projectPath . -executeMethod EdgegapServerBuild.BuildClient -edgegapClientTarget android -logFile android.log` | `Builds/Client/android/MegacityMetro.apk` |
+
+Android needs the **Android Build Support** module with its SDK, NDK and OpenJDK. The APK is signed with Unity's debug key, so it installs by sideloading (`adb install`, or copying it to the phone and allowing installs from unknown sources); use your own keystore and an App Bundle for a store build. Mobile release builds hide the Connect option, so phones always use Find Match.
+
+## Test it yourself
+
+1. Make sure the matchmaker shows ONLINE in the dashboard (free tier: restart it if it stopped).
+2. Start a Windows client and click **Multiplayer**, then **Find Match**. A lone player gets a server after about 30 s; the first deployment needs about a minute more to load before the client connects.
+3. On an Android phone, install the APK, open it and click **Multiplayer → Find Match**. While the first match is running, the phone joins the same server through backfill.
+4. In the dashboard, the deployment is tagged with the ticket IDs. Its log shows `[Edgegap] Connected players: N` and `Matched player connected` for each player.
+5. Quit every client. The deployment stops itself about 60 s after the last player leaves.
+
 ## Backfill (join in progress)
 
 A backfill is a ticket owned by a running server. When a newly queued player matches it, the matchmaker sends that player to this server instead of starting a new one. Every ticket carries a `backfill_group_size` attribute: clients send `["new", "1"]` ("a new match, or one seat on a running server"), and the server sends `["1"]`.
@@ -129,8 +149,10 @@ The Windows client is an IL2CPP Master build: it took about 40 minutes and the l
 
 For quick test clients, `-executeMethod EdgegapServerBuild.BuildClient -edgegapClientTarget win64 -edgegapClientMono -buildTarget Win64 -standaloneBuildSubtarget Player` builds with Mono into `Builds/Client/win64-mono/`. Pass `-standaloneBuildSubtarget Player` after a server build, or the build fails with "script class layout is incompatible".
 
+2026-10-22, matchmaker restarted, app version v2: two Windows Mono clients (`-batchmode -nographics`) matched together onto one deployment, connected, and the server logged both tickets with backfills open. The Android APK built (IL2CPP, ARM64, API 23 to 35) but was not run on a device.
+
 ## Not done yet
 
-- **Android and iOS clients**, and a windowed playtest on desktop. Mobile release builds hide the Connect option, so phones use Find Match, the path tested above.
+- **A phone playtest** of the Android APK, and a windowed playtest on desktop. **iOS** needs a Mac to build.
 - **Ticket validation.** The server logs a connection whose ticket it was not given, but still lets it in.
 - Vivox and UGS sign-in are untouched. The Edgegap matchmaker and direct-connect paths don't use them, and the Connect mode's session browser still lists UGS sessions.
