@@ -84,6 +84,16 @@ public static class EdgegapServerBuild
         if (target == BuildTarget.Android)
             EditorUserBuildSettings.buildAppBundle = false;
 
+        // -edgegapAndroidX86_64: also include x86_64, so the APK runs natively in the Android Emulator
+        // (and on ChromeOS). The project setting is restored after the build.
+        var architectures = PlayerSettings.Android.targetArchitectures;
+        bool x86_64 = target == BuildTarget.Android && Array.IndexOf(args, "-edgegapAndroidX86_64") >= 0;
+        if (x86_64)
+        {
+            PlayerSettings.Android.targetArchitectures = architectures | AndroidArchitecture.X86_64;
+            path = "Builds/Client/android/MegacityMetro-arm64-x86_64.apk";
+        }
+
         if (standalone)
             EditorUserBuildSettings.standaloneBuildSubtarget = StandaloneBuildSubtarget.Player;
 
@@ -113,6 +123,8 @@ public static class EdgegapServerBuild
         {
             if (mono)
                 PlayerSettings.SetScriptingBackend(group, backend);
+            if (x86_64)
+                PlayerSettings.Android.targetArchitectures = architectures;
         }
 
         if (report.summary.result != BuildResult.Succeeded)

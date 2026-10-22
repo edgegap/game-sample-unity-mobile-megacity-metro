@@ -94,14 +94,25 @@ Close the project in the Editor first, then run one of these from the project ro
 | Windows, quick test build (Mono, minutes) | `<Unity> -batchmode -quit -buildTarget Win64 -standaloneBuildSubtarget Player -projectPath . -executeMethod EdgegapServerBuild.BuildClient -edgegapClientTarget win64 -edgegapClientMono -logFile client.log` | `Builds/Client/win64-mono/Game.exe` |
 | Windows, project settings (IL2CPP Master, ~40 min, ~12 GB RAM at link) | same, without `-edgegapClientMono` | `Builds/Client/win64/Game.exe` |
 | Android (IL2CPP, ARM64) | `<Unity> -batchmode -quit -buildTarget Android -projectPath . -executeMethod EdgegapServerBuild.BuildClient -edgegapClientTarget android -logFile android.log` | `Builds/Client/android/MegacityMetro.apk` |
+| Android for the emulator (ARM64 + x86_64) | same, plus `-edgegapAndroidX86_64` | `Builds/Client/android/MegacityMetro-arm64-x86_64.apk` |
 
 Android needs the **Android Build Support** module with its SDK, NDK and OpenJDK. The APK is signed with Unity's debug key, so it installs by sideloading (`adb install`, or copying it to the phone and allowing installs from unknown sources); use your own keystore and an App Bundle for a store build. Mobile release builds hide the Connect option, so phones always use Find Match.
+
+The Android build uses Vulkan, with OpenGL ES 3.1 as a fallback (Player settings, **Require ES3.1**). Entities Graphics needs compute shaders, so devices with only OpenGL ES 3.0 can't run it.
+
+### Run it in the Android Emulator
+
+The emulator can stand in for a phone on a PC with a dedicated GPU. Use an x86_64 system image and the `-edgegapAndroidX86_64` APK, which runs natively there instead of through ARM translation.
+
+1. Install the emulator and an image, for example with the SDK manager from Unity's Android module (it asks you to accept the Android SDK licences): `sdkmanager --sdk_root=<sdk> emulator platform-tools "system-images;android-34;google_apis;x86_64"`, then create a virtual device (Android Studio's Device Manager, or `avdmanager`). 4 GB of RAM is enough.
+2. Start it on the host GPU **with its Vulkan support turned off**: `emulator -avd <name> -gpu host -feature -Vulkan`. With software graphics, Unity can't start its graphics API; with the emulator's Vulkan, the emulator crashes ("bad color buffer handle") as soon as the game renders. With Vulkan off, the game uses the OpenGL ES fallback.
+3. `adb install -r MegacityMetro-arm64-x86_64.apk`, open **Megacity Metro**, and decline the microphone prompt (Vivox voice chat, which the Edgegap path doesn't use). Then **Multiplayer → Find Match**.
 
 ## Test it yourself
 
 1. Make sure the matchmaker shows ONLINE in the dashboard (free tier: restart it if it stopped).
 2. Start a Windows client and click **Multiplayer**, then **Find Match**. A lone player gets a server after about 30 s; the first deployment needs about a minute more to load before the client connects.
-3. On an Android phone, install the APK, open it and click **Multiplayer → Find Match**. While the first match is running, the phone joins the same server through backfill.
+3. On an Android phone (or the [emulator](#run-it-in-the-android-emulator)), install the APK, open it and click **Multiplayer → Find Match**. While the first match is running, the phone joins the same server through backfill.
 4. In the dashboard, the deployment is tagged with the ticket IDs. Its log shows `[Edgegap] Connected players: N` and `Matched player connected` for each player.
 5. Quit every client. The deployment stops itself about 60 s after the last player leaves.
 
@@ -150,6 +161,8 @@ The Windows client is an IL2CPP Master build: it took about 40 minutes and the l
 For quick test clients, `-executeMethod EdgegapServerBuild.BuildClient -edgegapClientTarget win64 -edgegapClientMono -buildTarget Win64 -standaloneBuildSubtarget Player` builds with Mono into `Builds/Client/win64-mono/`. Pass `-standaloneBuildSubtarget Player` after a server build, or the build fails with "script class layout is incompatible".
 
 2026-10-22, matchmaker restarted, app version v2: two Windows Mono clients (`-batchmode -nographics`) matched together onto one deployment, connected, and the server logged both tickets with backfills open. The Android APK built (IL2CPP, ARM64, API 23 to 35) but was not run on a device.
+
+2026-10-22, Android Emulator (Android 14 x86_64 image, `-gpu host -feature -Vulkan`, NVIDIA RTX 3050 laptop GPU): the ARM64 + x86_64 APK with the OpenGL ES fallback reached the main menu, and its matchmaker client reported the matchmaker healthy. Find Match was not run from the emulator.
 
 ## Not done yet
 
