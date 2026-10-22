@@ -76,7 +76,7 @@ The server logs `[Edgegap] Connected players: 1` when the client joins.
 
 ## 5. Create the matchmaker
 
-1. Set `application.version` in `matchmaker-config.json` to your app version. Profile `metro`: one team of 2 to 150 players. Two players searching together get one server about 10 s after they queue, and a lone player gets one after 30 s. That suits testing; raise the minimum for real matches.
+1. Set `application.version` in `matchmaker-config.json` to your app version. Profile `metro`: one team of 2 to 150 players. Two players searching together get one server about 10 s after they queue, and a lone player gets one after about 20 s (tickets expire after 30 s). That suits testing; raise the minimum for real matches.
 2. In the dashboard, open **Matchmaker → Create Matchmaker**, upload `matchmaker-config.json`, then click **Create and Start**.
 3. When it shows ONLINE, copy the **API URL** and **Auth Token** into `Assets/Resources/EdgegapMatchmakerSettings.asset`. The auth token belongs to the matchmaker and grants no access to your Edgegap account, so it is safe to ship in clients.
 4. Rebuild the server and the clients. Both read this asset: the client to find matches, the server to create backfills.
@@ -111,7 +111,7 @@ The emulator can stand in for a phone on a PC with a dedicated GPU. Use an x86_6
 ## Test it yourself
 
 1. Make sure the matchmaker shows ONLINE in the dashboard (free tier: restart it if it stopped).
-2. Start a Windows client and click **Multiplayer**, then **Find Match**. A lone player gets a server after about 30 s; the first deployment needs about a minute more to load before the client connects.
+2. Start a Windows client and click **Multiplayer**, then **Find Match**. A lone player gets a server after about 20 s; the first deployment needs about a minute more to load before the client connects.
 3. On an Android phone (or the [emulator](#run-it-in-the-android-emulator)), install the APK, open it and click **Multiplayer → Find Match**. While the first match is running, the phone joins the same server through backfill.
 4. In the dashboard, the deployment is tagged with the ticket IDs. Its log shows `[Edgegap] Connected players: N` and `Matched player connected` for each player.
 5. Quit every client. The deployment stops itself about 60 s after the last player leaves.
@@ -130,7 +130,7 @@ On matchmaker deployments, `EdgegapBackfillSystem`:
 
 Players who are matched but still connecting keep the server from self-stopping.
 
-One known gap: if a deployment is stopped from outside (dashboard or API stop, or the max duration), the Unity player exits on SIGTERM without closing its backfills. Until they expire (`ticket_expiration_period`, 5 min), they can send a player to the stopped server. That player's connection times out, and the next Find Match works.
+One known gap: if a deployment is stopped from outside (dashboard or API stop, or the max duration), the Unity player exits on SIGTERM without closing its backfills. Until they expire (`ticket_expiration_period`, 30 s), they can send a player to the stopped server. That player's connection times out, and the next Find Match works.
 
 ## Self-stop
 
